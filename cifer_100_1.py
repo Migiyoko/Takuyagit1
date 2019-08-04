@@ -13,10 +13,19 @@ from keras.layers import Convolution2D, Input,UpSampling2D
 from keras.layers.pooling import MaxPooling2D
 from keras.models import Model
 import time
+import pandas as pd
+import os
+import _pickle as cPickle
+# import sys, codecs
+# import locale
+# sys.stdout = codecs.getwriter("utf-8")(sys.stdout)
+# locale.setlocale(locale.LC_CTYPE, ('UTF-8'))
+from keras.utils import np_utils
 
 
 n_sample_train = 50000
 n_sample_test = 10000
+nb_classes=100
 
 
 def latent_space_plot(encoded_train, one_hots_train,encoded_test,one_hots_test):
@@ -40,7 +49,7 @@ def latent_space_plot(encoded_train, one_hots_train,encoded_test,one_hots_test):
         plt.legend()
 def get_MNIST_data():
 
-    mnist = input_data.read_data_sets('./Data', one_hot=True)
+    mnist = input_data.read_data_sets('./Data1', one_hot=True)
     train_x, one_hots_train = mnist.train.next_batch(n_sample_train)
     test_x, one_hots_test = mnist.train.next_batch(n_sample_test)
 
@@ -91,7 +100,7 @@ def dense(inputs, in_size, out_size, activation='sigmoid', name='layer'):
     return l
 
 
-def conv2d(input, name, kshape, strides=[1, 1, 1, 1]):
+def conv2d(input, name, kshape, strides=[1, 2, 2, 1]):
     with tf.name_scope(name):
         W = tf.get_variable(name='w_'+name,
                             shape=kshape)
@@ -111,7 +120,7 @@ def maxpool2d(x,name,kshape=[1, 2, 2, 1], strides=[1, 2, 2, 1]):
                              padding='SAME')
         return out
 
-def deconv2d(input, name, kshape, n_outputs, strides=[1, 1], activation=tf.nn.relu):
+def deconv2d(input, name, kshape, n_outputs, strides=[2, 2], activation=tf.nn.relu):
     with tf.name_scope(name):
         out = tf.contrib.layers.conv2d_transpose(input,
                                                  num_outputs= n_outputs,
@@ -133,68 +142,72 @@ def dropout(input, name, keep_prob):
         out = tf.nn.dropout(input, keep_prob)
         return out
 
-# def conv_encode(input):
-#     x = Convolution2D(16, (3, 3), activation='relu', padding='same')(input)
-#     x = MaxPooling2D((2, 2), padding='same')(x)
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(x)
-#     x = MaxPooling2D((2, 2), padding='same')(x)
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(x)
-#     encoded = MaxPooling2D((2, 2), padding='same')(x)
-#     return encoded
+def unpickle(file):
+    with open(file, 'rb') as f:
+        fo = f.read()
+    # fo = open(file, 'rb')
+    # with cPickle.load(fo, "r", "Shift-JIS", "ignore") as file:
+    #     df = pd.read_table(file, delimiter=",")
+    #     print(df)
+    dict = cPickle.loads(fo,encoding='latin1')
+    # fo.close()
+    return dict
+
+def get_cifar100(folder):
+    train_fname = os.path.join(folder,'train')
+    test_fname  = os.path.join(folder,'test')
+    data_dict = unpickle(train_fname)
+    train_data = data_dict['data']
+    train_fine_labels = data_dict['fine_labels']
+    train_coarse_labels = data_dict['coarse_labels']
+
+    data_dict = unpickle(test_fname)
+    test_data = data_dict['data']
+    test_fine_labels = data_dict['fine_labels']
+    test_coarse_labels = data_dict['coarse_labels']
+
+    bm = unpickle(os.path.join(folder, 'meta'))
+    clabel_names = bm['coarse_label_names']
+    flabel_names = bm['fine_label_names']
+
+    return train_data, np.array(train_coarse_labels), np.array(train_fine_labels), test_data, np.array(test_coarse_labels), np.array(test_fine_labels), clabel_names, flabel_names
+
+tr_data100, tr_clabels100, tr_flabels100, te_data100, te_clabels100, te_flabels100, clabel_names100, flabel_names100 = get_cifar100('./Data2/cifar-100-python')
+# train_x, one_hots_train, test_x, one_hots_test,mnist = get_MNIST_data()
+number_test = te_flabels100
+
+train_x=np.reshape(tr_data100,(-1,32,32,3))
+test_x=np.reshape(te_data100,(-1,32,32,3))
+one_hots_train = np_utils.to_categorical(tr_flabels100, nb_classes)
+one_hots_test = np_utils.to_categorical(te_flabels100, nb_classes)
 
 
-# def conv_decode(encoded_input):
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(encoded_input)
-#     x = UpSampling2D((2, 2))(x)
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(x)
-#     x = UpSampling2D((2, 2))(x)
-#     x = Convolution2D(16, (3, 3), activation='relu')(x)
-#     x = UpSampling2D((2, 2))(x)
-#     decoded = Convolution2D(1, (3, 3), activation='sigmoid', padding='same')(x)
-#     return decoded
+# plot_MNIST(x=train_x, one_hot=one_hots_train)
 
-
-# def confusion_matrix(cm, accuracy):
-#
-#     plt.figure(figsize=(9, 9))
-#     sns.heatmap(cm, annot=True, fmt=".3f", linewidths=.5, square=True, cmap='Blues_r')
-#     plt.ylabel('True label')
-#     plt.xlabel('Predicted label')
-#     all_sample_title = 'Accuracy Score: {0}'.format(accuracy)
-#     plt.title(all_sample_title, size=15)
-
-train_x, one_hots_train, test_x, one_hots_test,mnist = get_MNIST_data()
-number_test = [one_hots_test[i, :].argmax() for i in range(0, one_hots_test.shape[0])]
-
-train_x=np.reshape(train_x,(-1,28,28,1))
-test_x=np.reshape(test_x,(-1,28,28,1))
-
-plot_MNIST(x=train_x, one_hot=one_hots_train)
-
-n_label = len(np.unique(number_test))   # Number of class
-height = train_x.shape[1]               # All the pixels are represented as a vector (dim: 784)
+n_label = 100   # Number of class
+# height = train_x.shape[1]               # All the pixels are represented as a vector (dim: 784)
 
 z_dimension = 2 # Latent space dimension
 
 # Hyperparameters
-hyperparameters_encode= {'en_filter':[[5,5,1,8],[3,3,8,16],[2,2,16,32]],
-                          'en_size':[784,256,64,z_dimension],
-                          'en_activation':['relu','relu','linear'],
-                          'names':['en_layer_1', 'en_layer_2', 'latent_space']}
-hyperparameters_decode= {'de_filter':[[3,3],[3,3],[3,3]],
-                         'de_size':[z_dimension,64,256,784],
-                          'de_activation':['relu','relu','relu'],
-                          'names':['de_layer_1', 'de_layer_2', 'de_layer_out']}
-hyperparameters_scope={'learning_late':0.001, 'maxEpoch':200, 'batch_size':512}
+hyperparameters_encode= {'en_filter':[[3,3,3,16],[3,3,16,32],[3,3,32,64],[3,3,64,128]],
+                         'en_size':[512,256,128,z_dimension],
+                         'en_activation':['relu','relu','linear'],
+                         'names':['en_layer_1', 'en_layer_2', 'latent_space']}
+hyperparameters_decode= {'de_filter':[[3,3],[3,3],[3,3],[3,3]],
+                         'de_size':[z_dimension,128,256,512],
+                         'de_activation':['relu','relu','relu'],
+                         'names':['de_layer_1', 'de_layer_2', 'de_layer_out']}
+hyperparameters_scope={'learning_late':0.0001, 'maxEpoch':100, 'batch_size':512}
 
 # Session and context manager
 tf.reset_default_graph()
 sess = tf.Session()
-input_img = Input(shape=(1, 28, 28))
+# input_img = Input(shape=(1, 28, 28))
 with tf.variable_scope(tf.get_variable_scope()):
 
     # Placeholders
-    x = tf.placeholder(tf.float32, [None, 28,28,1], name='x')
+    x = tf.placeholder(tf.float32, [None, 32,32,3], name='x')
     dropout_rate = tf.placeholder(tf.float32, name='dropout_rate')
 
     # Encoder
@@ -203,29 +216,32 @@ with tf.variable_scope(tf.get_variable_scope()):
     print(x)
 
     c1=conv2d(x, name='c1', kshape=hyperparameters_encode['en_filter'][0])
-    p1 = maxpool2d(c1, name='p1')
-    do1 = dropout(p1, name='do1',keep_prob=0.9)
+    # p1 = maxpool2d(c1, name='p1')
+    do1 = dropout(c1, name='do1',keep_prob=1.0)
     c2=conv2d(do1, name='c2', kshape=hyperparameters_encode['en_filter'][1])
-    p2 = maxpool2d(c2, name='p2')
-    do2 = dropout(p2, name='do2', keep_prob=0.9)
-    # c3=conv2d(do2, name='c3', kshape=hyperparameters_encode['en_filter'][2])
+    # p2 = maxpool2d(c2, name='p2')
+    do2 = dropout(c2, name='do2', keep_prob=1.0)
+    c3=conv2d(do2, name='c3', kshape=hyperparameters_encode['en_filter'][2])
     # p3 = maxpool2d(c3, name='p3')
-    # do3 = dropout(p3, name='do3', keep_rate=0.8)
+    do3 = dropout(c3, name='do3', keep_prob=1.0)
+    c4=conv2d(do3, name='c4', kshape=hyperparameters_encode['en_filter'][3])
+    # p3 = maxpool2d(c3, name='p3')
+    do4 = dropout(c4, name='do4', keep_prob=1.0)
 
     # c=conv_encode(x)
-    print(do2)
+    print(do4)
 
-    flatten= tf.reshape(do2,[-1,784])
+    flatten= tf.reshape(do4,[-1,512])
 
     print(flatten)
 
-    l1 = dense(flatten, in_size=hyperparameters_encode['en_size'][0],
-               out_size=hyperparameters_encode['en_size'][1],
-               activation=hyperparameters_encode['en_activation'][0]
-               , name=hyperparameters_encode['names'][0])
+    # l1 = dense(flatten, in_size=hyperparameters_encode['en_size'][0],
+    #            out_size=hyperparameters_encode['en_size'][1],
+    #            activation=hyperparameters_encode['en_activation'][0],
+    #            name=hyperparameters_encode['names'][0])
 
-    print(l1)
-    l2 = dense(l1, in_size=hyperparameters_encode['en_size'][1],
+    # print(l1)
+    l2 = dense(flatten, in_size=hyperparameters_encode['en_size'][0],
                out_size=hyperparameters_encode['en_size'][2],
                activation=hyperparameters_encode['en_activation'][1]
                , name=hyperparameters_encode['names'][1])
@@ -239,13 +255,13 @@ with tf.variable_scope(tf.get_variable_scope()):
 
     print("DECODER")
     # Decoder
-    l4 = dense(z, in_size=hyperparameters_decode['de_size'][0],
-               out_size=hyperparameters_decode['de_size'][1],
-               activation=hyperparameters_decode['de_activation'][0]
-               , name=hyperparameters_decode['names'][0])
+    # l4 = dense(z, in_size=hyperparameters_decode['de_size'][0],
+    #            out_size=hyperparameters_decode['de_size'][1],
+    #            activation=hyperparameters_decode['de_activation'][0]
+    #            , name=hyperparameters_decode['names'][0])
 
-    print(l4)
-    l5 = dense(l4, in_size=hyperparameters_decode['de_size'][1],
+    # print(l4)
+    l5 = dense(z, in_size=hyperparameters_decode['de_size'][0],
                out_size=hyperparameters_decode['de_size'][2],
                activation=hyperparameters_decode['de_activation'][1]
                , name=hyperparameters_decode['names'][1])
@@ -255,17 +271,20 @@ with tf.variable_scope(tf.get_variable_scope()):
                out_size=hyperparameters_decode['de_size'][3],
                activation=hyperparameters_decode['de_activation'][2]
                , name=hyperparameters_decode['names'][2])
-    decoded_input=tf.reshape(decoded_input,[-1,7,7,16])
+    decoded_input=tf.reshape(decoded_input,[-1,2,2,128])
 
-    # do4 = dropout(decoded_input, name='do4', keep_rate=0.8)
+    do5 = dropout(decoded_input, name='do5', keep_prob=1.0)
     # up1 = upsample(do4, name='up1', factor=[2, 2])
-    # dc1=deconv2d(up1,name='dc1',kshape=hyperparameters_decode['de_filter'][0],n_outputs=16)
-    up2 = upsample(decoded_input, name='up2', factor=[2, 2])
-    do5 = dropout(up2, name='do5', keep_prob=0.9)
-    dc2 = deconv2d(do5, name='dc2', kshape=hyperparameters_decode['de_filter'][1], n_outputs=8)
-    up3 = upsample(dc2, name='up3', factor=[2, 2])
-    do6 = dropout(up3, name='do6', keep_prob=0.9)
-    x_hat = deconv2d(do6, name='x_hat', kshape=hyperparameters_decode['de_filter'][2], n_outputs=1)
+    dc1=deconv2d(do5,name='dc1',kshape=hyperparameters_decode['de_filter'][0],n_outputs=64)
+    do6 = dropout(dc1, name='do6', keep_prob=1.0)
+    # up1 = upsample(do4, name='up1', factor=[2, 2])
+    dc2=deconv2d(do6,name='dc2',kshape=hyperparameters_decode['de_filter'][1],n_outputs=32)
+    # up2 = upsample(decoded_input, name='up2', factor=[2, 2])
+    do7 = dropout(dc2, name='do7', keep_prob=1.0)
+    dc3 = deconv2d(do7, name='dc3', kshape=hyperparameters_decode['de_filter'][2], n_outputs=16)
+    # up3 = upsample(dc2, name='up3', factor=[2, 2])
+    do8 = dropout(dc3, name='do8', keep_prob=1.0)
+    x_hat = deconv2d(do8, name='x_hat', kshape=hyperparameters_decode['de_filter'][3], n_outputs=3)
 
     # x_hat=conv_decode(encoded_input=tf.reshape(decoded_input,[-1,4,4,8]))
 
@@ -307,9 +326,6 @@ with tf.variable_scope(tf.get_variable_scope()):
     t2=time.time()
 
     print('learning_time=',t2-t1)
-    saver = tf.train.Saver()
-    saver.save(sess, '../MNIST-TensorFlow-master/model/model_1')
-    print('saved')
     plt.figure()
     plt.plot(loss_history)
 
@@ -352,34 +368,46 @@ with tf.variable_scope(tf.get_variable_scope()):
     accuracy = np.round(score / one_hots_test.shape[0], 4)
     print('Test accuracu is:' + str(accuracy))
 
+    # plt.figure()
+    # for i in range(25):
+    #     plt.subplot(5, 5, i+1)
+    #     plt.title(np.argmax(one_hots_train, axis=1)[i])
+    #     plt.axis("off")
+    #     # img = plt.imread(train_x[i].reshape(32, 32,3))
+    #     img=train_x[i].reshape(32, 32,3)
+
+    train_x=(train_x.reshape(50000, 3, 32, 32).transpose(0,2,3,1))/255
+    reconstructed=(reconstructed.reshape(50000, 3, 32, 32).transpose(0,2,3,1))/255
+    test_x=(test_x.reshape(10000,3,32,32).transpose(0,2,3,1))/255
+    reconstructed_test = (reconstructed_test.reshape(10000, 3, 32, 32).transpose(0, 2, 3, 1))/255
+
     plt.figure()
     for i in range(25):
         plt.subplot(5, 5, i+1)
-        plt.title(np.argmax(one_hots_train, axis=1)[i])
+        plt.title(flabel_names100[np.argmax(one_hots_train, axis=1)[i]])
         plt.axis("off")
-        plt.imshow(train_x[i].reshape(28, 28), cmap=cm.gray_r)
+        plt.imshow(train_x[i])
 
     plt.figure()
     for i in range(25):
         plt.subplot(5, 5, i + 1)
         # plt.title(label_test_predicted[i])
         plt.axis("off")
-        plt.imshow(reconstructed[i].reshape(28, 28), cmap=cm.gray_r)
+        plt.imshow(reconstructed[i])
 
     plt.figure()
     for i in range(25):
         plt.subplot(5, 5, i+1)
-        plt.title(label_test_true[i])
+        plt.title(flabel_names100[label_test_true[i]])
         plt.axis("off")
-        plt.imshow(test_x[i].reshape(28, 28), cmap=cm.gray_r)
+        plt.imshow(test_x[i])
 
     plt.figure()
     for i in range(25):
         plt.subplot(5, 5, i + 1)
-        plt.title(label_test_predicted[i])
+        plt.title(flabel_names100[label_test_predicted[i]])
         plt.axis("off")
-        plt.imshow(reconstructed_test[i].reshape(28, 28), cmap=cm.gray_r)
-
+        plt.imshow(reconstructed_test[i])
 
 
 
@@ -389,3 +417,5 @@ with tf.variable_scope(tf.get_variable_scope()):
 # Plot reconstruction
 
 # PCA
+# plt.figure()
+# plt.imshow(reconstructed_test[0])

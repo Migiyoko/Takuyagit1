@@ -99,7 +99,7 @@ def conv2d(input, name, kshape, strides=[1, 1, 1, 1]):
                             shape=[kshape[3]])
         out = tf.nn.conv2d(input,W,strides=strides, padding='SAME')
         out = tf.nn.bias_add(out, b)
-        out = tf.nn.relu(out)
+        out = tf.nn.leaky_relu(out)
         return out
     #filter=[height, width, in_channel, out_channel],strides=[1, up_down_stride, side_stride,1]
 
@@ -111,7 +111,7 @@ def maxpool2d(x,name,kshape=[1, 2, 2, 1], strides=[1, 2, 2, 1]):
                              padding='SAME')
         return out
 
-def deconv2d(input, name, kshape, n_outputs, strides=[1, 1], activation=tf.nn.relu):
+def deconv2d(input, name, kshape, n_outputs, strides=[1, 1], activation=tf.nn.leaky_relu):
     with tf.name_scope(name):
         out = tf.contrib.layers.conv2d_transpose(input,
                                                  num_outputs= n_outputs,
@@ -133,36 +133,6 @@ def dropout(input, name, keep_prob):
         out = tf.nn.dropout(input, keep_prob)
         return out
 
-# def conv_encode(input):
-#     x = Convolution2D(16, (3, 3), activation='relu', padding='same')(input)
-#     x = MaxPooling2D((2, 2), padding='same')(x)
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(x)
-#     x = MaxPooling2D((2, 2), padding='same')(x)
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(x)
-#     encoded = MaxPooling2D((2, 2), padding='same')(x)
-#     return encoded
-
-
-# def conv_decode(encoded_input):
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(encoded_input)
-#     x = UpSampling2D((2, 2))(x)
-#     x = Convolution2D(8, (3, 3), activation='relu', padding='same')(x)
-#     x = UpSampling2D((2, 2))(x)
-#     x = Convolution2D(16, (3, 3), activation='relu')(x)
-#     x = UpSampling2D((2, 2))(x)
-#     decoded = Convolution2D(1, (3, 3), activation='sigmoid', padding='same')(x)
-#     return decoded
-
-
-# def confusion_matrix(cm, accuracy):
-#
-#     plt.figure(figsize=(9, 9))
-#     sns.heatmap(cm, annot=True, fmt=".3f", linewidths=.5, square=True, cmap='Blues_r')
-#     plt.ylabel('True label')
-#     plt.xlabel('Predicted label')
-#     all_sample_title = 'Accuracy Score: {0}'.format(accuracy)
-#     plt.title(all_sample_title, size=15)
-
 train_x, one_hots_train, test_x, one_hots_test,mnist = get_MNIST_data()
 number_test = [one_hots_test[i, :].argmax() for i in range(0, one_hots_test.shape[0])]
 
@@ -179,11 +149,11 @@ z_dimension = 2 # Latent space dimension
 # Hyperparameters
 hyperparameters_encode= {'en_filter':[[5,5,1,8],[3,3,8,16],[2,2,16,32]],
                           'en_size':[784,256,64,z_dimension],
-                          'en_activation':['relu','relu','linear'],
+                          'en_activation':['leaky_relu','leaky_relu','linear'],
                           'names':['en_layer_1', 'en_layer_2', 'latent_space']}
 hyperparameters_decode= {'de_filter':[[3,3],[3,3],[3,3]],
                          'de_size':[z_dimension,64,256,784],
-                          'de_activation':['relu','relu','relu'],
+                          'de_activation':['leaky_relu','leake_relu','leaky_relu'],
                           'names':['de_layer_1', 'de_layer_2', 'de_layer_out']}
 hyperparameters_scope={'learning_late':0.001, 'maxEpoch':200, 'batch_size':512}
 
@@ -208,9 +178,7 @@ with tf.variable_scope(tf.get_variable_scope()):
     c2=conv2d(do1, name='c2', kshape=hyperparameters_encode['en_filter'][1])
     p2 = maxpool2d(c2, name='p2')
     do2 = dropout(p2, name='do2', keep_prob=0.9)
-    # c3=conv2d(do2, name='c3', kshape=hyperparameters_encode['en_filter'][2])
-    # p3 = maxpool2d(c3, name='p3')
-    # do3 = dropout(p3, name='do3', keep_rate=0.8)
+
 
     # c=conv_encode(x)
     print(do2)
@@ -257,9 +225,6 @@ with tf.variable_scope(tf.get_variable_scope()):
                , name=hyperparameters_decode['names'][2])
     decoded_input=tf.reshape(decoded_input,[-1,7,7,16])
 
-    # do4 = dropout(decoded_input, name='do4', keep_rate=0.8)
-    # up1 = upsample(do4, name='up1', factor=[2, 2])
-    # dc1=deconv2d(up1,name='dc1',kshape=hyperparameters_decode['de_filter'][0],n_outputs=16)
     up2 = upsample(decoded_input, name='up2', factor=[2, 2])
     do5 = dropout(up2, name='do5', keep_prob=0.9)
     dc2 = deconv2d(do5, name='dc2', kshape=hyperparameters_decode['de_filter'][1], n_outputs=8)
@@ -267,7 +232,6 @@ with tf.variable_scope(tf.get_variable_scope()):
     do6 = dropout(up3, name='do6', keep_prob=0.9)
     x_hat = deconv2d(do6, name='x_hat', kshape=hyperparameters_decode['de_filter'][2], n_outputs=1)
 
-    # x_hat=conv_decode(encoded_input=tf.reshape(decoded_input,[-1,4,4,8]))
 
     print(x_hat)
     # Scope
@@ -278,7 +242,6 @@ with tf.variable_scope(tf.get_variable_scope()):
 
     # Optimizer
     optimizer = tf.train.AdamOptimizer(learning_rate=learning_rate, name='optimizer').minimize(loss)
-    # optimizer = tf.train.GradientDescentOptimizer(learning_rate=learning_rate, name='optimizer').minimize(loss)
     # tensorboard
     writer=tf.summary.FileWriter('.\Tensorboard') #tensorboard -- logdir=./Tensorboard
     writer.add_graph(graph=sess.graph)
@@ -305,11 +268,7 @@ with tf.variable_scope(tf.get_variable_scope()):
         loss_history.append(epoch_loss)
         print('Epoch',epoch, '/', hyperparameters_scope['maxEpoch'], '. :Loss',epoch_loss)
     t2=time.time()
-
     print('learning_time=',t2-t1)
-    saver = tf.train.Saver()
-    saver.save(sess, '../MNIST-TensorFlow-master/model/model_1')
-    print('saved')
     plt.figure()
     plt.plot(loss_history)
 
@@ -327,17 +286,9 @@ with tf.variable_scope(tf.get_variable_scope()):
     encoded_test = sess.run(z, feed_dict=test_data)
     number_train = [one_hots_train[i, :].argmax() for i in range(0, one_hots_train.shape[0])]
     latent_space_plot(encoded_train, one_hots_train, encoded_test, one_hots_test)
-    # for label in np.unique(number_train):
-    #     plt.scatter(encoded[number_train==label, 0], encoded[number_train==label,1],s=5)
-    # # plt.figure()
-    # # plt.scatter(encoded[:, 0], encoded[:, 1], c=number_train,s=5)
-    # label= np.unique(number_train)
-    # plt.legend(label)
-    # Reconstruct the data at the output of the decoder
     reconstructed=sess.run(x_hat,feed_dict=train_data)
     reconstructed_test = sess.run(x_hat, feed_dict=test_data)
-    # plt.figure()
-    # plt.scatter(reconstructed[:, 0], reconstructed[:,1])
+
     nn = 10
     neigh = KNeighborsClassifier(n_neighbors=nn)
     neigh.fit(encoded_train, np.argmax(one_hots_train, axis=1))
@@ -350,7 +301,7 @@ with tf.variable_scope(tf.get_variable_scope()):
             score += 1
 
     accuracy = np.round(score / one_hots_test.shape[0], 4)
-    print('Test accuracu is:' + str(accuracy))
+    print('Test accuracy is:' + str(accuracy))
 
     plt.figure()
     for i in range(25):
@@ -380,12 +331,3 @@ with tf.variable_scope(tf.get_variable_scope()):
         plt.axis("off")
         plt.imshow(reconstructed_test[i].reshape(28, 28), cmap=cm.gray_r)
 
-
-
-
-
-# Plot the latent space
-
-# Plot reconstruction
-
-# PCA
